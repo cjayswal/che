@@ -18,6 +18,7 @@ import org.eclipse.che.api.core.model.machine.MachineConfig;
 import org.eclipse.che.api.core.model.machine.MachineStatus;
 import org.eclipse.che.api.core.model.machine.ServerConf;
 import org.eclipse.che.api.core.util.LineConsumer;
+import org.eclipse.che.api.machine.server.exception.InvalidRecipeException;
 import org.eclipse.che.api.machine.server.exception.MachineException;
 import org.eclipse.che.api.machine.server.model.impl.LimitsImpl;
 import org.eclipse.che.api.machine.server.model.impl.MachineConfigImpl;
@@ -229,12 +230,12 @@ public class DockerInstanceProviderTest {
     public void shouldRemoveLocalImageDuringRemovalOfSnapshot() throws Exception {
         final String repo = "repo";
         final String tag = "latest";
-        final DockerMachineSource instanceKey = new DockerMachineSource(repo).withTag(tag);
+        final DockerMachineSource dockerMachineSource = new DockerMachineSource(repo).withTag(tag);
         dockerInstanceProvider = getDockerInstanceProvider(false);
 
-        dockerInstanceProvider.removeInstanceSnapshot(instanceKey);
+        dockerInstanceProvider.removeInstanceSnapshot(dockerMachineSource);
 
-        verify(dockerConnector, times(1)).removeImage(RemoveImageParams.create(instanceKey.getFullName()));
+        verify(dockerConnector, times(1)).removeImage(RemoveImageParams.create(dockerMachineSource.getLocation(false)));
     }
 
     @Test
@@ -485,6 +486,15 @@ public class DockerInstanceProviderTest {
         verify(dockerConnector).createContainer(createContainerCaptor.capture(), anyString());
         verify(dockerConnector).startContainer(anyString(), eq(null));
         assertEquals(createContainerCaptor.getValue().getHostConfig().getMemorySwap(), -1);
+    }
+
+
+    @Test(expectedExceptions = InvalidRecipeException.class)
+    public void checkExceptionIfImageWithContent() throws Exception {
+        MachineImpl machine = getMachineBuilder().build();
+        machine.getConfig().getSource().setContent("hello");
+        machine.getConfig().getSource().setType(DOCKER_IMAGE_TYPE);
+        createInstanceFromRecipe(machine);
     }
 
     @Test

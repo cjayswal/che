@@ -253,7 +253,7 @@ public class DockerInstanceProvider implements InstanceProvider {
      *         if other error occurs
      */
     @Override
-    public Instance createInstance(Machine machine, LineConsumer creationLogsOutput)
+    public Instance createInstance(final Machine machine, final LineConsumer creationLogsOutput)
             throws UnsupportedRecipeException, InvalidRecipeException, NotFoundException, MachineException {
 
         // based on machine source, do the right steps
@@ -280,7 +280,7 @@ public class DockerInstanceProvider implements InstanceProvider {
             if (isNullOrEmpty(machineSource.getLocation())) {
                 throw new InvalidRecipeException(String.format("The type '%s' needs to be used with a location, not with any other parameter. Found '%s'.", type, machineSource));
             }
-            return doCreateInstanceImage(machine, machineContainerName, creationLogsOutput);
+            return createInstanceFromImage(machine, machineContainerName, creationLogsOutput);
         } else {
             // not supported
             throw new UnsupportedRecipeException("The type '" + type + "' is not supported");
@@ -298,15 +298,16 @@ public class DockerInstanceProvider implements InstanceProvider {
                               creationLogsOutput);
     }
 
-    protected Instance doCreateInstanceImage(final Machine machine, String machineContainerName,
+    protected Instance createInstanceFromImage(final Machine machine, String machineContainerName,
                                         final LineConsumer creationLogsOutput) throws NotFoundException, MachineException {
         final DockerMachineSource dockerMachineSource = new DockerMachineSource(machine.getConfig().getSource());
 
-            if (snapshotUseRegistry) {
-                pullImage(dockerMachineSource, creationLogsOutput);
-            }
+        if (snapshotUseRegistry) {
+            pullImage(dockerMachineSource, creationLogsOutput);
+        }
+
         final String machineImageName = "eclipse-che/" + machineContainerName;
-        final String fullNameOfPulledImage = dockerMachineSource.getFullName();
+        final String fullNameOfPulledImage = dockerMachineSource.getLocation(false);
         try {
             // tag image with generated name to allow sysadmin recognize it
             docker.tag(TagParams.create(fullNameOfPulledImage, machineImageName));
@@ -327,7 +328,7 @@ public class DockerInstanceProvider implements InstanceProvider {
                               creationLogsOutput);
     }
 
-    private Dockerfile parseRecipe(Recipe recipe) throws InvalidRecipeException {
+    private Dockerfile parseRecipe(final Recipe recipe) throws InvalidRecipeException {
         final Dockerfile dockerfile = getDockerFile(recipe);
         if (dockerfile.getImages().isEmpty()) {
             throw new InvalidRecipeException("Unable build docker based machine, Dockerfile found but it doesn't contain base image.");
@@ -339,7 +340,7 @@ public class DockerInstanceProvider implements InstanceProvider {
         return dockerfile;
     }
 
-    private Dockerfile getDockerFile(Recipe recipe) throws InvalidRecipeException {
+    private Dockerfile getDockerFile(final Recipe recipe) throws InvalidRecipeException {
         if (recipe.getScript() == null) {
             throw new InvalidRecipeException("Unable build docker based machine, recipe isn't set or doesn't provide Dockerfile and " +
                                              "no Dockerfile found in the list of files attached to this builder.");
@@ -352,12 +353,12 @@ public class DockerInstanceProvider implements InstanceProvider {
         }
     }
 
-    protected void buildImage(Dockerfile dockerfile,
+    protected void buildImage(final Dockerfile dockerfile,
                               final LineConsumer creationLogsOutput,
-                              String imageName,
-                              boolean doForcePullOnBuild,
-                              long memoryLimit,
-                              long memorySwapLimit)
+                              final String imageName,
+                              final boolean doForcePullOnBuild,
+                              final long memoryLimit,
+                              final long memorySwapLimit)
             throws MachineException {
 
         File workDir = null;
@@ -393,7 +394,7 @@ public class DockerInstanceProvider implements InstanceProvider {
         }
     }
 
-    private void pullImage(DockerMachineSource dockerMachineSource, final LineConsumer creationLogsOutput) throws MachineException {
+    private void pullImage(final DockerMachineSource dockerMachineSource, final LineConsumer creationLogsOutput) throws MachineException {
         if (dockerMachineSource.getRepository() == null) {
             throw new MachineException(String.format("Machine creation failed. Machine source is invalid. No repository is defined. Found %s.", dockerMachineSource));
         }
@@ -432,13 +433,19 @@ public class DockerInstanceProvider implements InstanceProvider {
      *         if exception occurs on instance snapshot removal
      */
     @Override
-    public void removeInstanceSnapshot(MachineSource machineSource) throws SnapshotException {
+    public void removeInstanceSnapshot(final MachineSource machineSource) throws SnapshotException {
         // use registry API directly because docker doesn't have such API yet
         // https://github.com/docker/docker-registry/issues/45
-        final DockerMachineSource dockerMachineSource = new DockerMachineSource(machineSource);
+        final DockerMachineSource dockerMachineSource;
+        try {
+            dockerMachineSource = new DockerMachineSource(machineSource);
+        } catch (MachineException e) {
+            throw new SnapshotException(e);
+        }
+
         if (!snapshotUseRegistry) {
             try {
-                docker.removeImage(RemoveImageParams.create(dockerMachineSource.getFullName()));
+                docker.removeImage(RemoveImageParams.create(dockerMachineSource.getLocation(false)));
             } catch (IOException ignore) {
             }
             return;
@@ -447,7 +454,7 @@ public class DockerInstanceProvider implements InstanceProvider {
         final String registry = dockerMachineSource.getRegistry();
         final String repository = dockerMachineSource.getRepository();
         if (registry == null || repository == null) {
-            LOG.error("Failed to remove instance snapshot: invalid instance key: {}", dockerMachineSource);
+            LOG.error("Failed to remove instance snapshot: invalid machine source: {}", dockerMachineSource);
             throw new SnapshotException("Snapshot removing failed. Snapshot attributes are not valid");
         }
 
@@ -481,10 +488,10 @@ public class DockerInstanceProvider implements InstanceProvider {
         }
     }
 
-    private Instance createInstance(String containerName,
-                                    Machine machine,
-                                    String imageName,
-                                    LineConsumer outputConsumer)
+    private Instance createInstance(final String containerName,
+                                    final Machine machine,
+                                    final String imageName,
+                                    final LineConsumer outputConsumer)
             throws MachineException {
         try {
             final Map<String, Map<String, String>> portsToExpose;

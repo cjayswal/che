@@ -10,30 +10,21 @@
  *******************************************************************************/
 package org.eclipse.che.plugin.docker.machine;
 
-import com.google.common.base.MoreObjects;
-
 import org.eclipse.che.api.core.model.machine.MachineSource;
+import org.eclipse.che.api.machine.server.exception.MachineException;
 import org.eclipse.che.api.machine.server.model.impl.MachineSourceImpl;
-
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import org.eclipse.che.plugin.docker.client.DockerFileException;
+import org.eclipse.che.plugin.docker.client.parser.DockerImageIdentifier;
+import org.eclipse.che.plugin.docker.client.parser.DockerImageIdentifierParser;
 
 import static org.eclipse.che.plugin.docker.machine.DockerInstanceProvider.DOCKER_IMAGE_TYPE;
 
 /**
  * Set of helper methods that identifies docker image properties
  *
- * @author Sergii Kabashnyuk
  * @author Florent Benoit
  */
 public class DockerMachineSource extends MachineSourceImpl {
-
-    /**
-     * Regexp used to parse a location of Docker image.
-     * it's based on optional registry followed by repository name followed by a digest or a tag
-     * Examples are available in the test.
-     */
-    public static final Pattern IMAGE_PATTERN = Pattern.compile("^((?<registry>[^/]++)(?:\\/))?(?<repository>.*?)((?:\\:)(?<tag>.*?))?((?:@)(?<digest>.*))?$");
 
     /**
      * Optional registry (like docker-registry.company.com:5000)
@@ -60,32 +51,32 @@ public class DockerMachineSource extends MachineSourceImpl {
      * Build a dedicated docker image source based on a given machine source object.
      * @param machineSource the machine source used to parse data.
      */
-    public DockerMachineSource(MachineSource machineSource) {
+    public DockerMachineSource(MachineSource machineSource) throws MachineException {
         super();
 
         // check type
         if (!DOCKER_IMAGE_TYPE.equals(machineSource.getType())) {
-            throw new IllegalArgumentException("Docker machine source can only be built with '" + DOCKER_IMAGE_TYPE + "' type");
+            throw new MachineException("Docker machine source can only be built with '" + DOCKER_IMAGE_TYPE + "' type");
         }
         setType(DOCKER_IMAGE_TYPE);
 
-        // parse either content or location
-        String expression = MoreObjects.firstNonNull(machineSource.getContent(), machineSource.getLocation());
-        Matcher matcher = IMAGE_PATTERN.matcher(expression);
-        if (!matcher.matches()) {
-            throw new IllegalArgumentException("Try to restore machine source with an invalid location/content. It is not in the expected format");
+        // parse location
+        final DockerImageIdentifier dockerImageIdentifier;
+        try {
+            dockerImageIdentifier = DockerImageIdentifierParser.parse(machineSource.getLocation());
+        } catch (DockerFileException e) {
+            throw new MachineException("Try to build a docker machine source with an invalid location/content. It is not in the expected format", e);
         }
 
         // populate
-        this.registry = matcher.group("registry");
-        this.repository = matcher.group("repository");
-        this.tag = matcher.group("tag");
-        this.digest = matcher.group("digest");
-
+        this.registry = dockerImageIdentifier.getRegistry();
+        this.repository = dockerImageIdentifier.getRepository();
+        this.tag = dockerImageIdentifier.getTag();
+        this.digest = dockerImageIdentifier.getDigest();
     }
 
 
-    /**
+        /**
      * Build image source based on given arguments
      * @param repository as for example codenvy/ubuntu_jdk8
      */
@@ -188,9 +179,9 @@ public class DockerMachineSource extends MachineSourceImpl {
     /**
      * Returns full name of docker image.
      * <p>
-     * It consists of registry, userspace, repository name, tag, digest.
-     * E.g. docker-registry.company.com:5000/userspace1/my-repository:some-tag
-     * E.g. docker-registry.company.com:5000/userspace1/my-repository@some-digest
+     * It consists of registry, repository name, tag, digest.
+     * E.g. docker-registry.company.com:5000/my-repository:some-tag
+     * E.g. docker-registry.company.com:5000/my-repository@some-digest
      * @param includeDigest if digest needs to be included or not
      */
     public String getLocation(boolean includeDigest) {
@@ -214,13 +205,6 @@ public class DockerMachineSource extends MachineSourceImpl {
             fullRepoId.append('@').append(getDigest());
         }
         return fullRepoId.toString();
-    }
-
-    /**
-     * Returns full name of docker image (without digest)
-     */
-    public String getFullName() {
-        return getLocation(false);
     }
 
 }

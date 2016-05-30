@@ -194,7 +194,7 @@ public class MachineManagerImpl implements MachineManager, WorkspaceStoppedHandl
                     final String displayName = machineState.getConfig().getName();
                     final boolean isDev = machineState.getConfig().isDev();
 
-                    startMachine(asDto(machineSource), displayName, isDev, RESTART, "dockerfile", "docker");
+                    startMachine(asDto(machineSource), displayName, isDev, RESTART, "docker");
 
                     isMachineRestarting = false;
                 }
@@ -248,15 +248,13 @@ public class MachineManagerImpl implements MachineManager, WorkspaceStoppedHandl
                               final String sourceType,
                               final String machineType) {
         MachineSourceDto sourceDto = dtoFactory.createDto(MachineSourceDto.class).withType(sourceType).withLocation(recipeURL);
-        startMachine(sourceDto, displayName, isDev, operationType, sourceType, machineType);
+        startMachine(sourceDto, displayName, isDev, operationType, machineType);
     }
     /**
      * @param machineSourceDto
      * @param displayName
      * @param isDev
      * @param operationType
-     * @param sourceType
-     *         "dockerfile" or "ssh-config"
      * @param machineType
      *         "docker" or "ssh"
      */
@@ -264,7 +262,6 @@ public class MachineManagerImpl implements MachineManager, WorkspaceStoppedHandl
                               final String displayName,
                               final boolean isDev,
                               final MachineOperationType operationType,
-                              final String sourceType,
                               final String machineType) {
 
         LimitsDto limitsDto = dtoFactory.createDto(LimitsDto.class).withRam(1024);
